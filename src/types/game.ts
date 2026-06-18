@@ -4,6 +4,31 @@ export type MoodLevel = 'happy' | 'good' | 'neutral' | 'bad' | 'angry'
 
 export type ActionType = 'chat' | 'gift' | 'work'
 
+export type MoodChangeReason =
+  | 'chat_positive'
+  | 'chat_negative'
+  | 'chat_neutral'
+  | 'gift_liked'
+  | 'gift_disliked'
+  | 'gift_normal'
+  | 'work_fatigue'
+  | 'event'
+  | 'daily_decay'
+  | 'other'
+
+export interface MoodChangeRecord {
+  id: number
+  characterId: string
+  day: number
+  time: TimeOfDay
+  beforeMood: number
+  afterMood: number
+  change: number
+  reason: MoodChangeReason
+  reasonDetail?: string
+  timestamp: number
+}
+
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
 
 export interface CharacterConfig {

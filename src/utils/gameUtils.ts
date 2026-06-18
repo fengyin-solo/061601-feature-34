@@ -1,4 +1,4 @@
-import type { TimeOfDay, MoodLevel, GameConfig, CharacterConfig } from '../types/game'
+import type { TimeOfDay, MoodLevel, GameConfig, CharacterConfig, MoodChangeReason } from '../types/game'
 
 export function getMoodLevel(mood: number): MoodLevel {
   if (mood >= 80) return 'happy'
@@ -30,6 +30,56 @@ export function getMoodLabel(mood: number): string {
     angry: '生气'
   }
   return labels[level]
+}
+
+export function getMoodEmoji(mood: number): string {
+  const level = getMoodLevel(mood)
+  const emojis: Record<MoodLevel, string> = {
+    happy: '😄',
+    good: '😊',
+    neutral: '😐',
+    bad: '😢',
+    angry: '😠'
+  }
+  return emojis[level]
+}
+
+export function getMoodChangeReasonLabel(reason: MoodChangeReason): string {
+  const labels: Record<MoodChangeReason, string> = {
+    chat_positive: '愉快聊天',
+    chat_negative: '无聊聊天',
+    chat_neutral: '平淡聊天',
+    gift_liked: '收到喜爱礼物',
+    gift_disliked: '收到不喜欢礼物',
+    gift_normal: '收到礼物',
+    work_fatigue: '被冷落',
+    event: '事件影响',
+    daily_decay: '时间流逝',
+    other: '其他原因'
+  }
+  return labels[reason]
+}
+
+export function getMoodChangeReasonIcon(reason: MoodChangeReason): string {
+  const icons: Record<MoodChangeReason, string> = {
+    chat_positive: '💬',
+    chat_negative: '💬',
+    chat_neutral: '💬',
+    gift_liked: '🎁',
+    gift_disliked: '🎁',
+    gift_normal: '🎁',
+    work_fatigue: '💼',
+    event: '📖',
+    daily_decay: '⏳',
+    other: '•'
+  }
+  return icons[reason]
+}
+
+export function getMoodChangeColor(change: number): string {
+  if (change > 0) return '#22c55e'
+  if (change < 0) return '#ef4444'
+  return '#94a3b8'
 }
 
 export function getTimeLabel(time: TimeOfDay): string {

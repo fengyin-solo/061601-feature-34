@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { TimeOfDay, ActionType, GameEventConfig, EventChoice } from '../types/game'
+import type { TimeOfDay, ActionType, GameEventConfig, EventChoice, MoodChangeRecord, MoodChangeReason } from '../types/game'
 import gameConfig from '../config/gameConfig'
 import {
   clamp,
@@ -19,6 +19,9 @@ export interface CharacterState {
   affinity: number
   mood: number
   unlocked: boolean
+  lastMoodChange?: number
+  lastMoodChangeReason?: MoodChangeReason
+  lastMoodChangeDetail?: string
 }
 
 export interface LogEntry {
@@ -66,8 +69,10 @@ export const useGameStore = defineStore('game', () => {
   const triggeredEvents = ref<string[]>([])
   const collectedCards = ref<string[]>([])
   const logs = ref<LogEntry[]>([])
+  const moodChanges = ref<MoodChangeRecord[]>([])
   const history = ref<HistorySnapshot[]>([])
   let logIdCounter = 0
+  let moodChangeIdCounter = 0
 
   const unlockedCharacters = computed(() =>
     characters.value.filter(c => c.unlocked)
@@ -161,10 +166,55 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  function updateCharacterMood(characterId: string, change: number) {
+  function addMoodChangeRecord(
+    characterId: string,
+    beforeMood: number,
+    afterMood: number,
+    change: number,
+    reason: MoodChangeReason,
+    reasonDetail?: string
+  ) {
+    if (change === 0) return
+    const record: MoodChangeRecord = {
+      id: ++moodChangeIdCounter,
+      characterId,
+      day: day.value,
+      time: timeSlot.value,
+      beforeMood,
+      afterMood,
+      change,
+      reason,
+      reasonDetail,
+      timestamp: Date.now()
+    }
+    moodChanges.value.push(record)
+    const char = getCharacterState(characterId)
+    if (char) {
+      char.lastMoodChange = change
+      char.lastMoodChangeReason = reason
+      char.lastMoodChangeDetail = reasonDetail
+    }
+  }
+
+  function updateCharacterMood(
+    characterId: string,
+    change: number,
+    reason: MoodChangeReason = 'other',
+    reasonDetail?: string
+  ) {
     const char = getCharacterState(characterId)
     if (!char || !char.unlocked) return
+    const beforeMood = char.mood
     char.mood = clamp(char.mood + change, gameConfig.minMood, gameConfig.maxMood)
+    const actualChange = char.mood - beforeMood
+    addMoodChangeRecord(characterId, beforeMood, char.mood, actualChange, reason, reasonDetail)
+  }
+
+  function getRecentMoodChanges(characterId: string, limit: number = 5) {
+    return moodChanges.value
+      .filter(m => m.characterId === characterId)
+      .slice(-limit)
+      .reverse()
   }
 
   function advanceTime() {
@@ -184,10 +234,11 @@ export const useGameStore = defineStore('game', () => {
 
     characters.value.forEach(char => {
       if (char.unlocked) {
-        char.mood = clamp(
-          char.mood - gameConfig.moodDecayPerDay,
-          gameConfig.minMood,
-          gameConfig.maxMood
+        updateCharacterMood(
+          char.id,
+          -gameConfig.moodDecayPerDay,
+          'daily_decay',
+          '时间流逝'
         )
         char.affinity = clamp(
           char.affinity - gameConfig.affinityDecayPerDay,
@@ -245,16 +296,34 @@ export const useGameStore = defineStore('game', () => {
     )
 
     updateCharacterAffinity(characterId, affinityChange)
-    updateCharacterMood(characterId, affinityChange > 0 ? 5 : -3)
 
-    const moodBefore = charState.mood
+    let moodChange: number
+    let moodReason: MoodChangeReason
+    let moodDetail: string
+
+    if (affinityChange > 0) {
+      moodChange = 5
+      moodReason = 'chat_positive'
+      moodDetail = `聊「${topic.topic}」很愉快`
+    } else if (affinityChange < 0) {
+      moodChange = -3
+      moodReason = 'chat_negative'
+      moodDetail = `聊「${topic.topic}」不太感兴趣`
+    } else {
+      moodChange = 0
+      moodReason = 'chat_neutral'
+      moodDetail = `聊「${topic.topic}」气氛平平`
+    }
+
+    updateCharacterMood(characterId, moodChange, moodReason, moodDetail)
+
     const characterName = charConfig.name
 
     let message = `和 ${characterName} 聊起了「${topic.topic}」`
     if (affinityChange > 0) {
-      message += `，ta似乎很开心！（好感 +${affinityChange}）`
+      message += `，ta似乎很开心！（好感 +${affinityChange}，心情 +${moodChange}）`
     } else if (affinityChange < 0) {
-      message += `，ta好像不太感兴趣...（好感 ${affinityChange}）`
+      message += `，ta好像不太感兴趣...（好感 ${affinityChange}，心情 ${moodChange}）`
     } else {
       message += '，气氛平平。'
     }
@@ -284,20 +353,36 @@ export const useGameStore = defineStore('game', () => {
     )
 
     updateCharacterAffinity(characterId, affinityChange)
-    updateCharacterMood(
-      characterId,
-      isGiftLiked(giftId, charConfig) ? 15 : isGiftDisliked(giftId, charConfig) ? -10 : 5
-    )
+
+    let moodChange: number
+    let moodReason: MoodChangeReason
+    let moodDetail: string
+
+    if (isGiftLiked(giftId, charConfig)) {
+      moodChange = 15
+      moodReason = 'gift_liked'
+      moodDetail = `收到喜欢的「${giftConfig.name}」`
+    } else if (isGiftDisliked(giftId, charConfig)) {
+      moodChange = -10
+      moodReason = 'gift_disliked'
+      moodDetail = `收到不喜欢的「${giftConfig.name}」`
+    } else {
+      moodChange = 5
+      moodReason = 'gift_normal'
+      moodDetail = `收到「${giftConfig.name}」`
+    }
+
+    updateCharacterMood(characterId, moodChange, moodReason, moodDetail)
 
     const characterName = charConfig.name
     let message = `送给 ${characterName} 一份「${giftConfig.name}」`
 
     if (isGiftLiked(giftId, charConfig)) {
-      message += `，ta非常喜欢！（好感 +${affinityChange}）`
+      message += `，ta非常喜欢！（好感 +${affinityChange}，心情 +${moodChange}）`
     } else if (isGiftDisliked(giftId, charConfig)) {
-      message += `，ta好像不太喜欢...（好感 ${affinityChange}）`
+      message += `，ta好像不太喜欢...（好感 ${affinityChange}，心情 ${moodChange}）`
     } else {
-      message += `，ta收下了。（好感 +${affinityChange}）`
+      message += `，ta收下了。（好感 +${affinityChange}，心情 +${moodChange}）`
     }
 
     addLog('action', message, characterId)
@@ -312,11 +397,11 @@ export const useGameStore = defineStore('game', () => {
 
     characters.value.forEach(char => {
       if (char.unlocked) {
-        updateCharacterMood(char.id, -2)
+        updateCharacterMood(char.id, -2, 'work_fatigue', '你忙于打工，冷落了ta')
       }
     })
 
-    addLog('action', `💼 打工赚了 ${earned} 代币（角色们的心情略有下降）`)
+    addLog('action', `💼 打工赚了 ${earned} 代币（角色们的心情略有下降 -2）`)
     advanceTime()
     return true
   }
@@ -369,7 +454,12 @@ export const useGameStore = defineStore('game', () => {
         updateCharacterAffinity(effect.characterId, effect.affinityChange)
       }
       if (effect.moodChange !== undefined) {
-        updateCharacterMood(effect.characterId, effect.moodChange)
+        updateCharacterMood(
+          effect.characterId,
+          effect.moodChange,
+          'event',
+          `事件选择：${choice.text}`
+        )
       }
     })
 
@@ -466,6 +556,7 @@ export const useGameStore = defineStore('game', () => {
     triggeredEvents,
     collectedCards,
     logs,
+    moodChanges,
     history,
     currentEvent,
     showEventModal,
@@ -476,6 +567,7 @@ export const useGameStore = defineStore('game', () => {
     getCharacterState,
     updateCharacterAffinity,
     updateCharacterMood,
+    getRecentMoodChanges,
     performAction,
     selectCharacter,
     handleEventChoice,
