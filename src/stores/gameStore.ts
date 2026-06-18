@@ -44,6 +44,8 @@ export interface HistorySnapshot {
   triggeredEvents: string[]
   collectedCards: string[]
   logs: LogEntry[]
+  moodChanges: MoodChangeRecord[]
+  moodChangeIdCounter: number
 }
 
 export const useGameStore = defineStore('game', () => {
@@ -108,7 +110,9 @@ export const useGameStore = defineStore('game', () => {
       flags: [...flags.value],
       triggeredEvents: [...triggeredEvents.value],
       collectedCards: [...collectedCards.value],
-      logs: JSON.parse(JSON.stringify(logs.value))
+      logs: JSON.parse(JSON.stringify(logs.value)),
+      moodChanges: JSON.parse(JSON.stringify(moodChanges.value)),
+      moodChangeIdCounter
     })
     if (history.value.length > 100) {
       history.value.shift()
@@ -127,6 +131,8 @@ export const useGameStore = defineStore('game', () => {
     triggeredEvents.value = [...snapshot.triggeredEvents]
     collectedCards.value = [...snapshot.collectedCards]
     logs.value = JSON.parse(JSON.stringify(snapshot.logs))
+    moodChanges.value = JSON.parse(JSON.stringify(snapshot.moodChanges))
+    moodChangeIdCounter = snapshot.moodChangeIdCounter
     history.value = history.value.slice(0, stepIndex)
     addLog('system', `回退到第 ${snapshot.day} 天 ${getTimeLabel(snapshot.timeSlot)}`)
   }
@@ -174,7 +180,6 @@ export const useGameStore = defineStore('game', () => {
     reason: MoodChangeReason,
     reasonDetail?: string
   ) {
-    if (change === 0) return
     const record: MoodChangeRecord = {
       id: ++moodChangeIdCounter,
       characterId,
@@ -320,12 +325,14 @@ export const useGameStore = defineStore('game', () => {
     const characterName = charConfig.name
 
     let message = `和 ${characterName} 聊起了「${topic.topic}」`
+    const affText = affinityChange > 0 ? `+${affinityChange}` : `${affinityChange}`
+    const moodText = moodChange > 0 ? `+${moodChange}` : `${moodChange}`
     if (affinityChange > 0) {
-      message += `，ta似乎很开心！（好感 +${affinityChange}，心情 +${moodChange}）`
+      message += `，ta似乎很开心！（好感 ${affText}，心情 ${moodText}）`
     } else if (affinityChange < 0) {
-      message += `，ta好像不太感兴趣...（好感 ${affinityChange}，心情 ${moodChange}）`
+      message += `，ta好像不太感兴趣...（好感 ${affText}，心情 ${moodText}）`
     } else {
-      message += '，气氛平平。'
+      message += `，气氛平平。（好感 ${affText}，心情 ${moodText}）`
     }
 
     addLog('action', message, characterId)
@@ -528,8 +535,10 @@ export const useGameStore = defineStore('game', () => {
     triggeredEvents.value = []
     collectedCards.value = []
     logs.value = []
+    moodChanges.value = []
     history.value = []
     logIdCounter = 0
+    moodChangeIdCounter = 0
 
     addLog('system', '🎮 游戏开始！欢迎来到恋爱物语')
     checkAndTriggerEvent()

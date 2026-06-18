@@ -130,12 +130,16 @@ watch(
           </div>
 
           <div 
-            v-if="item.state.lastMoodChange !== undefined && item.state.lastMoodChangeReason"
+            v-if="item.state.lastMoodChangeReason"
             class="mood-change-hint"
-            :class="{ positive: item.state.lastMoodChange > 0, negative: item.state.lastMoodChange < 0 }"
+            :class="{ 
+              positive: item.state.lastMoodChange > 0, 
+              negative: item.state.lastMoodChange < 0,
+              neutral: item.state.lastMoodChange === 0
+            }"
           >
             <span class="change-icon">{{ getMoodChangeReasonIcon(item.state.lastMoodChangeReason) }}</span>
-            <span class="change-detail">
+            <span class="change-detail" :title="item.state.lastMoodChangeDetail">
               {{ getMoodChangeReasonLabel(item.state.lastMoodChangeReason) }}
             </span>
             <span 
@@ -426,6 +430,15 @@ watch(
 
 [data-theme='dark'] .mood-change-hint.negative {
   background: #7f1d1d;
+}
+
+.mood-change-hint.neutral {
+  border-left-color: #6b7280;
+  background: #f9fafb;
+}
+
+[data-theme='dark'] .mood-change-hint.neutral {
+  background: #374151;
 }
 
 .change-icon {
